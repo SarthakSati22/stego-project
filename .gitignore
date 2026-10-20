@@ -1,0 +1,16 @@
+# Data and outputs (too large for Git)
+data/
+results/
+*.wav
+*.mp3
+*.mp4
+*.avi
+*.pt
+*.pth
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+.pytest_cache/
