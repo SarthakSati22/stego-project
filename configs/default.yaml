@@ -2,20 +2,21 @@ seed: 42
 seeds: [0, 1, 2]
 
 data:
-  clip_seconds: 10
+  clip_seconds: 2
   audio:
     sample_rate: 16000
     channels: 1
     bit_depth: 16
   video:
-    width: 256
-    height: 256
+    width: 128
+    height: 128
     fps: 25
   manifest: data/manifest.csv
   split:
     train: 0.70
     val: 0.15
     test: 0.15
+  
 
 payload:
   sizes_bytes: [32, 64, 128]
