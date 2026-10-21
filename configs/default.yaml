@@ -1,0 +1,41 @@
+seed: 42
+seeds: [0, 1, 2]
+
+data:
+  clip_seconds: 10
+  audio:
+    sample_rate: 16000
+    channels: 1
+    bit_depth: 16
+  video:
+    width: 256
+    height: 256
+    fps: 25
+  manifest: data/manifest.csv
+  split:
+    train: 0.70
+    val: 0.15
+    test: 0.15
+
+payload:
+  sizes_bytes: [32, 64, 128]
+
+attacks:
+  mp3_kbps: [128, 64]
+  h264_crf: [23, 28]
+  h265_crf: [23, 28]
+  frame_drop_ratio: [0.05, 0.10]
+  resize_scale: [0.75]
+
+strategies:
+  - audio_only
+  - video_only
+  - fixed_50_50
+  - adaptive_no_feedback
+  - adaptive_with_feedback
+
+metrics:
+  video: [psnr, ssim]
+  audio: [snr]
+  recovery: [bit_error_rate, recovery_rate]
+  detection: [accuracy, auc]
