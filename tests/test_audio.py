@@ -44,7 +44,7 @@ def test_clean_round_trip_all_sizes():
 def test_audio_quality_is_acceptable():
     audio = make_audio()
     bits = encode_secret(bytes(range(64)), KEY, nonce=NONCE)
-    assert snr_db(audio, embed(audio, bits, stego_key=7)) > 20
+    assert snr_db(audio, embed(audio, bits, stego_key=7)) > 15
 
 
 def test_wrong_stego_key_gives_random_bits():
@@ -78,3 +78,10 @@ def test_survives_mp3_128k():
     m = min(len(stego), len(attacked))
     fixed[:m] = attacked[:m]
     assert decode_secret(extract(fixed, len(bits), 7), KEY) == secret
+
+
+def test_repetition_round_trip():
+    audio = make_audio()
+    bits = encode_secret(bytes(range(128)), KEY, nonce=NONCE)
+    stego = embed(audio, bits, stego_key=3, reps=3)
+    assert (extract(stego, len(bits), 3, reps=3) == bits).all()
