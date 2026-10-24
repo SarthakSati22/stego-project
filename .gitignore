@@ -13,4 +13,5 @@ __pycache__/
 *.pyc
 .venv/
 .ipynb_checkpoints/
-.pytest_cache/
+.pytest_cache/api_out/
+api_out/
