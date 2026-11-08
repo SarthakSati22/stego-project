@@ -193,10 +193,64 @@ export default function ThreeCarrier() {
                 <span>Active Plan: {job.k}-of-{job.n} ("{job.plan}")</span>
               </div>
               <p className="panel-desc">
-                Any <b>{job.k}</b> of the <b>{job.n}</b> pieces can rebuild the secret. Carrier budget: <b>{job.bits_per_carrier} bits/carrier</b> (total <b>{job.bits_total} bits</b>).
+                Any <b>{job.k}</b> of the <b>{job.n}</b> pieces can rebuild the secret. Largest carrier piece: <b>{job.bits_per_carrier} bits</b> (total <b>{job.bits_total} bits</b>).
               </p>
             </div>
           </div>
+
+          {/* Allocation split bar (same look as Audio + Video tab) */}
+          {(() => {
+            const bb = job.bits_by_carrier || {};
+            const keys = job.carriers.filter((k) => bb[k] != null);
+            const total = keys.reduce((a, k) => a + bb[k], 0) || 1;
+            const colors = { audio: "var(--carrier-audio)", video: "var(--carrier-video)", image: "var(--carrier-image)" };
+            const names = { audio: "Audio Stream", video: "Video Stream", image: "Image Still" };
+            return (
+              <div className="carrier-split-container">
+                <div className="carrier-bar">
+                  {keys.map((k) => (
+                    <div key={k} style={{ width: `${(bb[k] / total) * 100}%`, background: colors[k], transition: "width 0.4s ease" }}
+                         title={`${names[k]}: ${bb[k]} bits (${((bb[k] / total) * 100).toFixed(1)}%)`} />
+                  ))}
+                </div>
+                <div className="carrier-legend">
+                  {keys.map((k) => (
+                    <span key={k} className="legend-item">
+                      <span className="legend-dot" style={{ background: colors[k] }} />
+                      <span>{names[k]}: <b>{bb[k]} bits</b> ({((bb[k] / total) * 100).toFixed(1)}%)</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {job.risk_driven && (
+            <div className="carrier-split-container">
+              <div className="metric-title" style={{ marginBottom: 8 }}>
+                Risk measured on this clip (detector score with 128 bits hidden alone; above 0.5 means flagged)
+              </div>
+              <table className="data-table">
+                <thead>
+                  <tr><th>Carrier</th><th>Risk @128 bits</th><th>Safe capacity</th><th>Piece size</th></tr>
+                </thead>
+                <tbody>
+                  {job.carriers.map((k) => (
+                    <tr key={k}>
+                      <td><b>{k.toUpperCase()}</b></td>
+                      <td>{job.risk_at_128_bits?.[k] == null ? "-" : fmt(job.risk_at_128_bits[k], 3)}</td>
+                      <td>{job.safe_capacity_bits?.[k] ?? "-"} bits</td>
+                      <td>{job.bytes_by_carrier?.[k] ?? "-"} bytes ({fmt((job.shares?.[k] ?? 0) * 100)}%)</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="panel-desc" style={{ marginTop: 8 }}>
+                The more a carrier is flagged, the smaller its piece. All three pieces are needed to rebuild the secret.
+              </p>
+              {job.risk_note && <div className="alert-box error">⚠️ {job.risk_note}</div>}
+            </div>
+          )}
 
           <div className="metrics-grid">
             {job.quality.snr_db != null && (
