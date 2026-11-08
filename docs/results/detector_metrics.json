@@ -1,0 +1,20 @@
+{
+  "audio_auc": 0.9981392238986728,
+  "video_auc": 1.0,
+  "fusion_auc": 1.0,
+  "fusion_audio_masked_auc": 0.9004339491851516,
+  "fusion_video_masked_auc": 0.897281009506564,
+  "fusion_weights_audio_video": [
+    2.175256326858424,
+    2.1444226989632376
+  ],
+  "n_train": 5220,
+  "n_val": 1125,
+  "n_test": 1128,
+  "audio_auc_bits_1_600": 0.9963165489481279,
+  "audio_auc_bits_600_1200": 0.9999400892669922,
+  "audio_auc_bits_1200_1000000": 1.0,
+  "video_auc_bits_1_600": 1.0,
+  "video_auc_bits_600_1200": 1.0,
+  "video_auc_bits_1200_1000000": 1.0
+}

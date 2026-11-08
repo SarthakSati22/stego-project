@@ -1,0 +1,4 @@
+,samples,stego,clean,accuracy,acc_ci_low,acc_ci_high,precision,recall,f1,false_positive_rate,false_negative_rate,auc,TP,FP,TN,FN
+audio detector (audio payload present?),1128.0,596.0,532.0,0.9831560283687943,0.975177304964539,0.9893617021276596,0.988155668358714,0.9798657718120806,0.9839932603201348,0.013157894736842105,0.020134228187919462,0.9981392238986728,584.0,7.0,525.0,12.0
+video detector (video payload present?),1128.0,603.0,525.0,1.0,1.0,1.0,1.0,1.0,1.0,0.0,0.0,1.0,603.0,0.0,525.0,0.0
+fusion detector (any payload present?),1128.0,752.0,376.0,1.0,1.0,1.0,1.0,1.0,1.0,0.0,0.0,1.0,752.0,0.0,376.0,0.0
