@@ -29,6 +29,7 @@ class Plan:
     carriers: tuple          # which carriers are used, in fragment order
     k: int                   # fragments needed
     video: str = "standard"  # "standard" or "motion"
+    risk: bool = False       # unequal pieces chosen from detector risk (needs every carrier)
 
     @property
     def n(self):
@@ -44,18 +45,31 @@ PLANS = {
     "replicate_3": Plan(ORDER, 1),
     "erasure_2of3_motion": Plan(ORDER, 2, "motion"),
     "video_only_motion": Plan(("video",), 1, "motion"),
+    "risk_split3": Plan(ORDER, 3, "standard", True),
+    "risk_split3_motion": Plan(ORDER, 3, "motion", True),
 }
+DEFAULT_SHARES = {"audio": 1 / 3, "video": 1 / 3, "image": 1 / 3}   # used only if no shares are given
 
 
 def _vid(plan):
     return VM if plan.video == "motion" else VS
 
 
-def embed(audio, frames, still, secret: bytes, passphrase_key: bytes, plan: Plan):
-    """Returns (stego_audio, stego_frames, stego_still, meta)."""
+def embed(audio, frames, still, secret: bytes, passphrase_key: bytes, plan: Plan, shares=None):
+    """Returns (stego_audio, stego_frames, stego_still, meta).
+
+    shares ({carrier: fraction}) is used only by the risk plans; it defaults to equal thirds.
+    """
     nonce = os.urandom(NONCE_LEN)
     frame = nonce + AESGCM(passphrase_key).encrypt(nonce, secret, None)
-    frags = E.split_parity(frame, plan.k, plan.n)
+    lens = None
+    if plan.risk:
+        shares = shares or DEFAULT_SHARES
+        sh = [shares[c] for c in plan.carriers]
+        lens = E.weighted_lengths(len(frame), sh)
+        frags = E.split_weighted(frame, sh)
+    else:
+        frags = E.split_parity(frame, plan.k, plan.n)
     out = {"audio": audio, "video": frames, "image": still}
     for name, frag in zip(plan.carriers, frags):
         bits = E.protect(frag)
@@ -67,15 +81,19 @@ def embed(audio, frames, still, secret: bytes, passphrase_key: bytes, plan: Plan
             out[name] = I.embed(still, bits, KEYS[name])
     meta = {"flen": len(frame), "k": plan.k, "n": plan.n, "carriers": plan.carriers,
             "video": plan.video, "frag_bits": E.fragment_nbits(len(frame), plan.k)}
+    if plan.risk:
+        meta.update(risk=True, frag_lens=lens, frag_bits_each=[E.piece_nbits(x) for x in lens],
+                    frag_bits=max(E.piece_nbits(x) for x in lens),
+                    shares={c: float(x) for c, x in zip(plan.carriers, sh)})
     return out["audio"], out["video"], out["image"], meta
 
 
 def extract(audio, frames, still, passphrase_key: bytes, meta: dict):
     """Returns (secret_or_None, list of per-carrier status 'ok'/'erased')."""
-    plan = Plan(tuple(meta["carriers"]), meta["k"], meta["video"])
-    nb = meta["frag_bits"]
+    plan = Plan(tuple(meta["carriers"]), meta["k"], meta["video"], bool(meta.get("risk", False)))
+    nbs = meta["frag_bits_each"] if plan.risk else [meta["frag_bits"]] * plan.n
     frags, status = [], []
-    for name in plan.carriers:
+    for name, nb in zip(plan.carriers, nbs):
         if name == "audio":
             bits = A.extract(audio, nb, KEYS[name])
         elif name == "video":
@@ -85,7 +103,8 @@ def extract(audio, frames, still, passphrase_key: bytes, meta: dict):
         f = E.unprotect(bits)
         frags.append(f)
         status.append("ok" if f is not None else "erased")
-    frame = E.join_parity(frags, meta["flen"], plan.k, plan.n)
+    frame = (E.join_weighted(frags, meta["flen"]) if plan.risk
+             else E.join_parity(frags, meta["flen"], plan.k, plan.n))
     if frame is None:
         return None, status
     try:

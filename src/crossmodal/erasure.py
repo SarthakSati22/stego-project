@@ -89,3 +89,35 @@ def unprotect(bits, inner: int = INNER_NSYM) -> bytes | None:
         return None
     frag, crc = body[:-4], body[-4:]
     return frag if zlib.crc32(frag).to_bytes(4, "big") == crc else None
+
+
+# ---- unequal ("risk-weighted") split: n pieces whose sizes follow the given shares, no parity ----
+
+def weighted_lengths(flen: int, shares) -> list[int]:
+    """Piece sizes in bytes (each at least 1) that follow the shares and add up to flen."""
+    sh = np.asarray(shares, dtype=float)
+    sh = sh / sh.sum()
+    lens = np.maximum(1, np.floor(sh * flen).astype(int))
+    lens[int(np.argmax(lens))] += flen - int(lens.sum())
+    return [int(x) for x in lens]
+
+
+def split_weighted(frame: bytes, shares) -> list[bytes]:
+    out, pos = [], 0
+    for n in weighted_lengths(len(frame), shares):
+        out.append(frame[pos:pos + n])
+        pos += n
+    return out
+
+
+def join_weighted(frags: list, flen: int) -> bytes | None:
+    """All pieces are needed: a missing one (None) loses the frame."""
+    if any(f is None for f in frags):
+        return None
+    frame = b"".join(frags)
+    return frame if len(frame) == flen else None
+
+
+def piece_nbits(length: int, inner: int = INNER_NSYM) -> int:
+    """Bits one carrier must hold for a piece of this many bytes."""
+    return (length + 4 + inner) * 8

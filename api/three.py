@@ -12,6 +12,7 @@ from api.main import OUT, ROOT, clean, load_clip
 from src.channel import attacks as T
 from src.crossmodal import image_carrier as I
 from src.crossmodal.pipeline3 import PLANS, embed, extract
+from src.crossmodal.riskshare import load_detectors, risk_split
 from src.crypto.secret import derive_key
 from src.eval.metrics import psnr, snr, ssim
 from src.media_io import read_luma, read_wav, write_luma, write_wav
@@ -28,6 +29,9 @@ PLAN_INFO = {
     "erasure_2of3_motion": "Same as 2-of-3, with the motion-aware video embedder.",
     "replicate_3": "A full copy in every carrier. Survives two destroyed carriers (largest cost).",
     "video_only_motion": "Video only, motion-aware embedder.",
+    "risk_split3": "Cut in 3 pieces whose sizes follow the detector risk measured on THIS clip: "
+                   "the earlier a carrier gets flagged, the smaller its piece. Needs ALL three.",
+    "risk_split3_motion": "Risk-weighted split (see above) with the motion-aware video embedder.",
 }
 # (audio attack, video attack, jpeg quality). "kill_*" settings are deliberately extreme.
 SCENARIOS = {
@@ -54,6 +58,20 @@ class Extract3Request(BaseModel):
     job_id: str
     passphrase: str
     scenario: str = "clean"
+
+
+_DETS = {}
+
+
+def detectors():
+    """Trained detectors (audio, video, and the image one if it has been trained), loaded once."""
+    if "d" not in _DETS:
+        try:
+            _DETS["d"] = load_detectors(str(ROOT / "results" / "detectors.pkl"),
+                                        str(ROOT / "results" / "image_detector.pkl"))
+        except Exception as e:
+            raise HTTPException(400, f"risk-weighted split needs results/detectors.pkl ({e})")
+    return _DETS["d"]
 
 
 def through_scenario(name, audio, frames, still):
@@ -87,8 +105,14 @@ def embed3(req: Embed3Request):
                                  f"(missing {raw.name} in data/raw)")
     still = I.load_still(str(raw))
     plan = PLANS[req.plan]
+    risk = None
     try:
-        sa, sf, si, meta = embed(audio, frames, still, secret, derive_key(req.passphrase), plan)
+        if plan.risk:
+            risk = risk_split(audio, frames, still, detectors(), plan.video)
+        sa, sf, si, meta = embed(audio, frames, still, secret, derive_key(req.passphrase), plan,
+                                 shares=risk["shares"] if risk else None)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(400, f"cannot embed: {e}")
     job = uuid.uuid4().hex[:12]
@@ -99,10 +123,21 @@ def embed3(req: Embed3Request):
     cv2.imwrite(str(folder / "stego.png"), si)
     (folder / "meta3.json").write_text(json.dumps({"clip_id": req.clip_id, "meta": meta}))
     used = meta["carriers"]
+    each = meta.get("frag_bits_each")
+    extra = {}
+    if risk:
+        extra = {"shares": {c: round(v, 3) for c, v in risk["shares"].items()},
+                 "bytes_by_carrier": dict(zip(used, meta["frag_lens"])),
+                 "bits_by_carrier": dict(zip(used, each)),
+                 "safe_capacity_bits": {c: round(v) for c, v in risk["safe_bits"].items()},
+                 "risk_at_128_bits": {c: (None if v is None else round(v, 3))
+                                      for c, v in risk["risk_at_128"].items()},
+                 "risk_note": None if risk["image_detector"] else
+                 "image detector not trained (python -m scripts.train_image_detector): image risk not used"}
     return {
         "job_id": job, "plan": req.plan, "k": meta["k"], "n": meta["n"],
         "carriers": used, "bits_per_carrier": meta["frag_bits"],
-        "bits_total": meta["frag_bits"] * meta["n"],
+        "bits_total": sum(each) if each else meta["frag_bits"] * meta["n"], **extra,
         "quality": {
             "snr_db": clean(snr(audio, sa)) if "audio" in used else None,
             "video_psnr_db": clean(psnr(frames, sf)) if "video" in used else None,
