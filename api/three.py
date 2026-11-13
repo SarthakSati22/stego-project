@@ -8,6 +8,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from api import db
+from api.db import history as _history
 from api.main import OUT, ROOT, clean, load_clip
 from src.channel import attacks as T
 from src.crossmodal import image_carrier as I
@@ -137,7 +139,7 @@ def embed3(req: Embed3Request):
                                       for c, v in risk["risk_at_128"].items()},
                  "risk_note": None if risk["image_detector"] else
                  "image detector not trained (python -m scripts.train_image_detector): image risk not used"}
-    return {
+    out = {
         "job_id": job, "plan": req.plan, "k": meta["k"], "n": meta["n"],
         "carriers": used, "bits_per_carrier": meta["frag_bits"],
         "bits_total": sum(each) if each else meta["frag_bits"] * meta["n"], **extra,
@@ -147,6 +149,8 @@ def embed3(req: Embed3Request):
             "video_ssim": clean(ssim(frames, sf)) if "video" in used else None,
             "image_psnr_db": clean(psnr(still[None], si[None])) if "image" in used else None},
     }
+    db.log_job(out, req.clip_id)
+    return out
 
 
 @router.post("/extract3")
@@ -162,10 +166,17 @@ def extract3(req: Extract3Request):
     still = cv2.imread(str(folder / "stego.png"), cv2.IMREAD_GRAYSCALE)
     audio, frames, still = through_scenario(req.scenario, audio, frames, still)
     secret, status = extract(audio, frames, still, derive_key(req.passphrase), meta)
-    return {"recovered": secret is not None, "scenario": req.scenario,
+    res = {"recovered": secret is not None, "scenario": req.scenario,
             "carrier_status": dict(zip(meta["carriers"], status)),
             "needed": meta["k"], "of": meta["n"],
             "secret": secret.decode(errors="replace") if secret is not None else None}
+    db.log_extract(req.job_id, req.scenario, res["recovered"], res["carrier_status"])
+    return res
+
+
+@router.get("/history3")
+def history3(limit: int = 50):
+    return _history(limit)
 
 
 @router.get("/download3/{job_id}/{kind}")
